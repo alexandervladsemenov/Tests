@@ -1,9 +1,7 @@
 #include <mpi.h>
-#include <random>
 #include <iostream>
 #include <fstream>
-#include <vector>
-#include <algorithm>
+//#include <hdf5.h>
 #include <string>
 #include <chrono>
 #include <cmath>
@@ -14,8 +12,8 @@ double* phi_grid;
 double alpha = 0.1;
 double beta = 0.2;
 
-int Nt = 10000; // need to x3
-int Np = 10000; // need to x3
+int Nt = 15000; // need to x3
+int Np = 15000; // need to x3
 double Rmin = 1.0;
 double Rmax = 2.0;
 double pi = acos(-1.0);
@@ -46,11 +44,17 @@ double computeSomeValue(int i, int j, double R )
 	return value;
 }
 int main(){
+   ofstream outputFile;
+    outputFile.open("data.dat");
    MPI_Init(NULL,NULL);
    int world_rank = 0; // just some definition for world_rank
    int world_size = 1;// just some definition for world_size
    int error1 = MPI_Comm_size(MPI_COMM_WORLD, &world_size);
    int error2 = MPI_Comm_rank(MPI_COMM_WORLD, &world_rank);
+   char* fileName = "testfileStripe";
+   char*  cmd = "stripe_small testfileStripe";
+   	if(world_rank==0)
+	system(cmd);
    double R  = Rmax;
    auto t1 = MPI_Wtime();
 
@@ -67,12 +71,14 @@ int main(){
 			matrix[i][j+1] = computeSomeValue(i,j+1,R); // compiler is smart enough to unroll the loop on its own
 		}
     auto t2 = MPI_Wtime(); 
-	cout<<"ID "<<world_rank << " TIME IS "<< t2 -t1<<endl;
+	   	if(world_rank==0)
+			outputFile<<"ID "<<world_rank << " TIME IS "<< t2 -t1<<endl;
 	if(world_rank==0)
-		cout<<"Buffer size is "<< double(Np*Nt)/1024/1024/1024*8.0 << "GB " <<endl;
+		outputFile<<"Buffer size is "<< double(Np*Nt)/1024/1024/1024*8.0 << "GB " <<endl;
 	
    MPI_File fileToWrite;
    MPI_File singleFile;
+   MPI_File StripeFile;
    MPI_Status status;
    MPI_Offset filesize;
        auto t3 = MPI_Wtime(); 
@@ -85,7 +91,7 @@ int main(){
 //	MPI_STATUS_IGNORE);
     auto t4 = MPI_Wtime(); 
 	if(world_rank==0)
-		cout<<"ID "<<world_rank << " TIME TO WRITE COLLECTIVE IS "<< t4 -t2<<endl;
+		outputFile<<"ID "<<world_rank << " TIME TO WRITE COLLECTIVE IS "<< t4 -t2<<endl;
 	MPI_File_close(&fileToWrite); 
 	
 	
@@ -99,8 +105,20 @@ int main(){
 		MPI_File_close(&singleFile); 
 	    auto t6 = MPI_Wtime(); 
 			if(world_rank==0)
-			cout<<"ID "<<world_rank << " TIME TO WRITE SINGLE IS "<< t6 -t5<<endl;
+			outputFile<<"ID "<<world_rank << " TIME TO WRITE SINGLE IS "<< t6 -t5<<endl;
+		// checling Lustre Striping
+	       auto t7 = MPI_Wtime(); 
+    error = MPI_File_open(MPI_COMM_WORLD, "testfileStripe", MPI_MODE_CREATE | MPI_MODE_WRONLY,
+	MPI_INFO_NULL, &StripeFile); 
+
+	MPI_File_write_at_all(StripeFile, world_rank * Np*Nt * sizeof(double), matrix, Np*Nt, MPI_DOUBLE, &status);
+
+    auto t8 = MPI_Wtime(); 
+	if(world_rank==0)
+		outputFile<<"ID "<<world_rank << " TIME TO WRITE STRIPED COLLECTIVE IS "<< t8 -t7<<endl;
+	MPI_File_close(&StripeFile); 	
 		
+		    outputFile.close();
    MPI_Barrier( MPI_COMM_WORLD);	
    MPI_Finalize();
    return 0;
