@@ -93,7 +93,7 @@ int main()
     // tracing tools such as Nsight and Visual Profiler to show complete traces.
     auto cudaStatus = addwithBlas<float>(cc, aa, bb, multiplier1, arraySize);
 //    cudaStatus = addwithBlas<int>(c, a, b, multiplier, arraySize);
-    std::cout << "COMPUTING with CUBLAS\n";
+    std::cout << "COMPUTING SUM OF ARRAYS with CUBLAS\n";
     printArray(cc, arraySize);
     cudaStatus = cudaDeviceReset();
     if (cudaStatus != cudaSuccess) {
